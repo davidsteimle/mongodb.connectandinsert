@@ -11,6 +11,8 @@ The $user password -- CHANGE this to secure
 The ase URI for your connection.
 .PARAMETER documents
 An object or objects to insert.
+.PARAMETER testrun
+Runs the script as normal, but only displays the javascript file and the mongosh command.
 #>
 
 # Add a requirement for mongosh
@@ -22,8 +24,16 @@ param(
     [string]$user,
     [string]$password,
     [string]$uri,
-    [string]$documents
+    [array]$documents,
+    [switch]$testrun
 )
+
+Write-Verbose "Is `$documents null? $($null -eq $documents)"
+
+if ($null -eq $documents) {
+    Write-Output 'No documents provided.'
+    exit 1
+}
 
 # Clean-up URI
 if($uri[-1] -eq '/'){
@@ -33,32 +43,16 @@ if($uri[-1] -eq '/'){
 # Create a generic list of supplied data.
 $insertMany = New-Object 'System.Collections.Generic.List[psobject]'
 
-# Sample doc for early testing. Change to param.
-# $documents = @(
-#     [pscustomobject]@{
-#         title = 'Hedwig and the Angry Inch'
-#         director = 'Mitchell, John Cameron'
-#         year = 2001
-#         media =  @('bluray')
-#         cast = @('Mitchell, John Cameron','Martin, Andrea','Pitt, Michael','SHor, Miriam')
-#         language = 'English'
-#         criterion = $true
-#     },
-#     [pscustomobject]@{
-#         title = 'Psycho Beach Party'
-#         director = 'King, Robert Lee'
-#         year = 2000
-#         media =  @('bluray')
-#         cast = @('Ambrose, Lauren','Gibson, Thomas','Brendon, Nicholas')
-#         language = 'English'
-#     }
-# )
-
 # Add each document to the generic list.
 $documents.ForEach({ $insertMany.Add($PSItem) })
 
 # File for javascript -- CHANGE this to a temporary file.
-$file = 'connect-and-insert.js'
+$file = New-TemporaryFile
+Write-Verbose "Creating temporary file $($file.VersionInfo.FileName)" -Verbose
+$jsfilename = $file.VersionInfo.FileName -replace ".tmp$",'.js'
+Rename-Item -Path $file -NewName $jsfilename
+$file = Get-Item $jsfilename
+Write-Verbose "Change that file to a javascript file extension $($file.VersionInfo.FileName)" -Verbose
 
 # Decide on insert methodology.
 # DeprecationWarning: Collection.insert() is deprecated. Use insertOne, insertMany, or bulkWrite.
@@ -82,4 +76,11 @@ mongosh "$uri/$database" --apiVersion 1 --username $user --password $password --
 "@
 
 # Run the command.
-Invoke-Expression $command
+if ($testrun) {
+    Get-Content $($file.VersionInfo.FileName)
+    Write-Host $command
+} else {
+    # Invoke-Expression $command
+}
+
+Remove-Item $file
